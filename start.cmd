@@ -14,7 +14,6 @@ if not exist node_modules (
   call npm install --no-audit --no-fund
 )
 
-REM 公司网络代理（默认走 xfusion 代理，可用 set HTTPS_PROXY=... 覆盖）
-if "%HTTPS_PROXY%"=="" set HTTPS_PROXY=http://proxy.xfusion.com:8080
+REM 公司网络代理（按需设置：set HTTPS_PROXY=http://your-proxy:port）
 
 node server.js
