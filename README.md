@@ -45,7 +45,7 @@ REM 编辑 config.json
 start.cmd
 ```
 
-如果在公司网络环境（已默认走 `proxy.xfusion.com:8080`，需要改：`set HTTPS_PROXY=http://your-proxy:port`）。
+如果在公司网络环境需要走代理：`set HTTPS_PROXY=http://your-proxy:port`。
 
 ### Linux ARM (树莓派 / Jetson / DGX Spark / AWS Graviton 等)
 
