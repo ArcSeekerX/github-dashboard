@@ -1,0 +1,29 @@
+{
+  "github": {
+    "token": "ghp_replace_with_your_personal_access_token",
+    "username": "your-github-username",
+    "emailOverride": "you@example.com"
+  },
+  "containerImages": [
+    {
+      "name": "ghcr.io/your-name/app:latest",
+      "description": "主应用镜像，生产环境使用",
+      "tags": ["prod", "stable"]
+    },
+    {
+      "name": "ghcr.io/your-name/worker:dev",
+      "description": "后台 worker，开发分支镜像",
+      "tags": ["dev"]
+    }
+  ],
+  "extraNotes": [
+    {
+      "label": "默认 git email",
+      "value": "you@example.com"
+    },
+    {
+      "label": "SSH key fingerprint",
+      "value": "SHA256:xxxxxxxxxxxxxxxx"
+    }
+  ]
+}

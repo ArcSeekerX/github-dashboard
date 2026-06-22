@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GitHub 个人账户看板</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>GitHub 个人账户看板</h1>
+    <div class="actions">
+      <button id="refreshBtn" class="btn ghost">刷新</button>
+      <span id="status" class="status"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 顶部：用户信息 + Token 并排 -->
+    <div class="row-top">
+      <!-- 用户信息 -->
+      <section class="card" id="userCard">
+        <h2>用户信息</h2>
+        <div class="user-block">
+          <img id="avatar" class="avatar" alt="avatar" />
+          <div class="user-fields" id="userFields">
+            <div class="placeholder">加载中…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Access Token -->
+      <section class="card" id="tokenCard">
+        <h2>Access Token</h2>
+        <div class="row">
+          <span class="label">PAT</span>
+          <code class="value mono" id="tokenView">—</code>
+          <button class="btn" data-action="toggle-token">显示</button>
+          <button class="btn primary" data-action="copy-token">复制</button>
+        </div>
+        <div class="row">
+          <span class="label">过期时间</span>
+          <span class="value" id="tokenExpire">—</span>
+        </div>
+        <div class="row">
+          <span class="label">权限范围</span>
+          <span class="value mono" id="tokenScopes">—</span>
+        </div>
+
+        <div class="token-actions">
+          <a class="btn ghost" href="https://github.com/settings/tokens" target="_blank" rel="noopener">在 GitHub 生成新 Token ↗</a>
+          <button class="btn" data-action="show-paste">粘贴新 Token</button>
+        </div>
+
+        <form id="pasteForm" class="paste-form hidden">
+          <input type="password" id="newTokenInput" placeholder="粘贴新生成的 ghp_... 或 github_pat_..." />
+          <button type="submit" class="btn primary">保存到 config.json</button>
+          <button type="button" class="btn ghost" data-action="cancel-paste">取消</button>
+        </form>
+        <div class="hint">「保存」会写入本地 <code>config.json</code> 并立刻使用新 Token；不会调用 GitHub 接口创建 Token（GitHub 不支持自动生成）。</div>
+      </section>
+    </div>
+
+    <!-- 仓库列表 -->
+    <section class="card" id="reposCard">
+      <h2>
+        仓库列表
+        <input type="search" id="repoSearch" placeholder="搜索仓库名 / 描述…" />
+        <span class="count" id="repoCount"></span>
+      </h2>
+      <div id="reposList" class="list repos">
+        <div class="placeholder">加载中…</div>
+      </div>
+    </section>
+
+    <!-- 容器镜像（移到仓库下方） -->
+    <section class="card" id="imagesCard">
+      <h2>
+        容器镜像 (GHCR)
+        <input type="search" id="imageSearch" placeholder="搜索镜像名…" />
+        <span class="count" id="imageCount"></span>
+        <button class="btn ghost" data-action="reload-packages">重新加载</button>
+      </h2>
+      <div id="imagesList" class="list images">
+        <div class="placeholder">加载中…</div>
+      </div>
+      <div id="imagesManual" class="list images" style="margin-top:8px;"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
