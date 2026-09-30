@@ -171,11 +171,41 @@ function cardHtml(t) {
 
 function render() {
   $('#patCount').textContent = `${state.tokens.length} 个`;
+  syncRevealAllBtn();
   if (!state.tokens.length) {
-    $('#patList').innerHTML = '<div class="placeholder">暂无 PAT，点击右上角「新增 PAT」添加</div>';
+    $('#patList').innerHTML = '<div class="placeholder">暂无 PAT，点击右上角「新增 PAT」登记</div>';
     return;
   }
   $('#patList').innerHTML = state.tokens.map(cardHtml).join('');
+}
+
+function syncRevealAllBtn() {
+  const btn = $('#revealAllBtn');
+  if (!btn) return;
+  const ids = state.tokens.map(t => t.id);
+  const allRevealed = ids.length > 0 && ids.every(id => state.revealed[id]);
+  btn.textContent = allRevealed ? '全部隐藏' : '全部显示';
+}
+
+async function toggleRevealAll(btn) {
+  const ids = state.tokens.map(t => t.id);
+  const allRevealed = ids.length > 0 && ids.every(id => state.revealed[id]);
+  if (allRevealed) {
+    state.revealed = {};
+    render();
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const pairs = await Promise.all(ids.map(async (id) => {
+      const { token } = await fetchJSON(`/api/tokens/${encodeURIComponent(id)}/reveal`);
+      return [id, token];
+    }));
+    pairs.forEach(([id, token]) => { state.revealed[id] = token; });
+    render();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function load() {
@@ -283,6 +313,9 @@ $('#addCancel').addEventListener('click', () => {
   closeSheet('#addModal');
 });
 $('#checkAllBtn').addEventListener('click', () => checkAll().catch(err => toast('错误: ' + err.message)));
+$('#revealAllBtn').addEventListener('click', (e) => {
+  toggleRevealAll(e.currentTarget).catch(err => toast('错误: ' + err.message));
+});
 
 async function init() {
   try {

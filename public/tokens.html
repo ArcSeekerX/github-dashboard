@@ -29,6 +29,7 @@
         <button type="button" class="seg" data-theme-choice="light">浅色</button>
         <button type="button" class="seg" data-theme-choice="dark">深色</button>
       </div>
+      <button id="revealAllBtn" class="btn" type="button">全部显示</button>
       <button id="checkAllBtn" class="btn">刷新状态</button>
       <button id="showAddBtn" class="btn primary">新增 PAT</button>
       <span id="status" class="status"></span>
@@ -43,6 +44,7 @@
         <div class="placeholder">加载中…</div>
       </div>
       <div class="hint">
+        GitHub API 不提供「列出账号全部 PAT」的接口（官方仅网页端可见），因此请把需要管理的 Token 在这里登记一次：新增时自动校验，之后可集中查看完整信息、一键复制/显示、设为活跃。<br>
         Token 保存在本地 <code>config.json</code>（已 gitignore）。「刷新状态」会逐个调用 <code>api.github.com</code> 读取账号、scopes、有效期与速率配额；「设为活跃」会让看板与 agent 改用该 Token（写入 <code>github.token</code>）。
       </div>
     </section>
