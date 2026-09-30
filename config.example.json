@@ -4,6 +4,7 @@
     "username": "your-github-username",
     "emailOverride": "you@example.com"
   },
+  "tokens": [],
   "containerImages": [
     {
       "name": "ghcr.io/your-name/app:latest",

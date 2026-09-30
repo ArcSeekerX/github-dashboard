@@ -4,6 +4,7 @@ const state = {
   tokenRevealed: false,
   tokenMasked: '',
   tokenFull: null,
+  username: '',
   repos: [],
   packages: [],
   manualImages: []
@@ -17,21 +18,51 @@ function toast(msg) {
   toast._tm = setTimeout(() => t.classList.remove('show'), 1500);
 }
 
+function legacyCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.top = '-1000px';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+function copiedFeedback(btn) {
+  if (!btn) return;
+  const orig = btn.textContent;
+  btn.classList.add('copied');
+  btn.textContent = '已复制';
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.textContent = orig;
+  }, 1200);
+}
+
 async function copy(text, btn) {
-  try {
-    await navigator.clipboard.writeText(text);
-    if (btn) {
-      const orig = btn.textContent;
-      btn.classList.add('copied');
-      btn.textContent = '已复制';
-      setTimeout(() => {
-        btn.classList.remove('copied');
-        btn.textContent = orig;
-      }, 1200);
-    }
+  if (window.isSecureContext && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedFeedback(btn);
+      toast('已复制到剪贴板');
+      return;
+    } catch (e) { /* fall through to legacy path */ }
+  }
+  if (legacyCopy(text)) {
+    copiedFeedback(btn);
     toast('已复制到剪贴板');
-  } catch (e) {
-    toast('复制失败: ' + e.message);
+    return;
+  }
+  if (window.showCopyFallback) {
+    window.showCopyFallback(text);
+  } else {
+    toast('复制失败，请手动选择复制');
   }
 }
 
@@ -74,6 +105,7 @@ async function fetchJSON(url, opts) {
 async function loadConfig() {
   const cfg = await fetchJSON('/api/config');
   state.tokenMasked = cfg.tokenMasked;
+  state.username = cfg.username || '';
   state.manualImages = cfg.containerImages || [];
   $('#tokenView').textContent = cfg.tokenMasked;
   renderManualImages();
@@ -190,18 +222,19 @@ function renderPackages() {
   }
   $('#imagesList').innerHTML = filtered.map(p => `
     <div class="image-item">
-      <div class="head">
-        <a class="name link" href="${escapeAttr(p.html_url)}" target="_blank" rel="noopener">${escapeHtml(p.full_ref)} ↗</a>
-        <button class="btn primary" data-copy="${escapeAttr(p.full_ref)}">复制</button>
+      <div class="image-info">
+        <div class="head">
+          <a class="name link" href="${escapeAttr(p.html_url)}" target="_blank" rel="noopener">${escapeHtml(p.full_ref)} ↗</a>
+          <span class="badge">${escapeHtml(p.visibility)}</span>
+        </div>
+        <div class="desc">
+          <span>更新于 ${new Date(p.updated_at).toLocaleDateString()}</span>
+        </div>
       </div>
-      <div class="desc">
-        <span class="badge">${escapeHtml(p.visibility)}</span>
-        <span>${p.version_count} version(s)</span>
-        <span>更新于 ${new Date(p.updated_at).toLocaleDateString()}</span>
-      </div>
-      <div class="btns">
-        <button class="btn" data-copy="${escapeAttr('docker pull ' + p.full_ref)}">docker pull</button>
-        <button class="btn" data-copy="${escapeAttr(p.name)}">仅 name</button>
+      <div class="image-actions">
+        <button class="btn primary" data-copy="${escapeAttr('docker pull ' + p.full_ref)}">docker pull</button>
+        <button class="btn primary" data-action="copy-pull" data-image="${escapeAttr(p.full_ref)}">pull (带 PAT)</button>
+        <button class="btn primary" data-copy="${escapeAttr(p.name)}">仅 name</button>
       </div>
     </div>
   `).join('');
@@ -215,12 +248,16 @@ function renderManualImages() {
   }
   $('#imagesManual').innerHTML = `<div class="section-label">手动配置 (config.json)</div>` + list.map(img => `
     <div class="image-item">
-      <div class="head">
-        <span class="name mono">${escapeHtml(img.name)}</span>
+      <div class="image-info">
+        <div class="head">
+          <span class="name mono">${escapeHtml(img.name)}</span>
+        </div>
+        ${img.description ? `<div class="desc">${escapeHtml(img.description)}</div>` : ''}
+        ${img.tags?.length ? `<div class="tags">${img.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      </div>
+      <div class="image-actions">
         <button class="btn primary" data-copy="${escapeAttr(img.name)}">复制</button>
       </div>
-      ${img.description ? `<div class="desc">${escapeHtml(img.description)}</div>` : ''}
-      ${img.tags?.length ? `<div class="tags">${img.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
     </div>
   `).join('');
 }
@@ -243,10 +280,15 @@ async function handleTokenAction(action, btn) {
     const { token } = await fetchJSON('/api/token');
     await copy(token, btn);
   } else if (action === 'show-paste') {
-    $('#pasteForm').classList.remove('hidden');
-    $('#newTokenInput').focus();
+    openSheet('#pasteModal');
+  } else if (action === 'copy-pull') {
+    const ref = btn.dataset.image || '';
+    const { token } = await fetchJSON('/api/token');
+    const user = state.username || 'USERNAME';
+    const cmd = `echo '${token}' | docker login ghcr.io -u ${user} --password-stdin && docker pull ${ref}`;
+    await copy(cmd, btn);
   } else if (action === 'cancel-paste') {
-    $('#pasteForm').classList.add('hidden');
+    closeSheet('#pasteModal');
     $('#newTokenInput').value = '';
   } else if (action === 'reload-packages') {
     loadPackages();
@@ -281,7 +323,7 @@ $('#pasteForm').addEventListener('submit', async (e) => {
     });
     toast('Token 已保存');
     $('#newTokenInput').value = '';
-    $('#pasteForm').classList.add('hidden');
+    closeSheet('#pasteModal');
     await Promise.all([loadConfig(), loadTokenInfo(), loadUser(), loadRepos(), loadPackages()]);
   } catch (err) {
     toast('保存失败: ' + err.message);

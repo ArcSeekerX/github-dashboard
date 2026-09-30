@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
+  <title>PAT 信息管理 · GitHub 看板</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('ghdash-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.dataset.theme = t;
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>PAT 信息管理</h1>
+    <div class="actions">
+      <a class="btn ghost" href="index.html">← 返回看板</a>
+      <div class="segmented" role="group" aria-label="外观">
+        <button type="button" class="seg" data-theme-choice="light">浅色</button>
+        <button type="button" class="seg" data-theme-choice="dark">深色</button>
+      </div>
+      <button id="checkAllBtn" class="btn">刷新状态</button>
+      <button id="showAddBtn" class="btn primary">新增 PAT</button>
+      <span id="status" class="status"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card">
+      <h2>全部 PAT <span class="count" id="patCount"></span></h2>
+
+      <div id="patList" class="list pats">
+        <div class="placeholder">加载中…</div>
+      </div>
+      <div class="hint">
+        Token 保存在本地 <code>config.json</code>（已 gitignore）。「刷新状态」会逐个调用 <code>api.github.com</code> 读取账号、scopes、有效期与速率配额；「设为活跃」会让看板与 agent 改用该 Token（写入 <code>github.token</code>）。
+      </div>
+    </section>
+  </main>
+
+  <div id="addModal" class="sheet-overlay hidden">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+      <h3 class="sheet-title" id="addTitle">新增 PAT</h3>
+      <p class="sheet-message">先调用 GitHub 校验该 Token，通过后保存到本地 config.json。</p>
+      <form id="addForm">
+        <div class="field">
+          <label class="field-label" for="addLabel">备注名</label>
+          <input id="addLabel" name="label" autocomplete="off" placeholder="部署机 / CI / 本地看板" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="addToken">Token</label>
+          <input id="addToken" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_... 或 github_pat_..." />
+        </div>
+        <div class="field">
+          <label class="field-label" for="addNote">用途说明（可选）</label>
+          <input id="addNote" name="note" autocomplete="off" placeholder="例如：部署机发布用 / CI 只读" />
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="addCancel">取消</button>
+          <button type="submit" class="btn primary">校验并保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="ui.js"></script>
+  <script src="tokens.js"></script>
+</body>
+</html>

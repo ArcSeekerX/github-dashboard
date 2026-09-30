@@ -6,9 +6,11 @@
 
 - **用户信息卡**：头像、username、name、email、profile 链接，每项一键复制
 - **Access Token 卡**：默认掩码显示，可临时显示/隐藏；显示过期时间（剩 <30 天橙色 / <7 天红色）与 scopes；支持「在 GitHub 生成新 Token ↗」一键跳转 + 「粘贴新 Token」直接写回 `config.json`
+- **PAT 管理页**（`/tokens.html`）：集中管理多个 PAT，支持新增（自动校验）、编辑、删除、显示/复制、一键「设为活跃」；实时检测每个 Token 的账号、scopes、有效期与速率配额
 - **仓库列表卡**：搜索过滤；每个仓库提供 HTTPS / SSH / `git clone` 命令 / 网址 / 全名 5 个复制按钮，标题可点击跳转
 - **GHCR 容器镜像卡**：自动拉取 GitHub Container Registry 中的所有镜像，显示完整 `ghcr.io/owner/name:tag`，支持复制镜像名 / `docker pull` 命令
 - **自动刷新**：切回浏览器标签页时若距上次加载超过 30 秒会自动重新拉取；点击右上角「刷新」可强制刷新
+- **深色 / 浅色主题**：右上角「浅色 / 深色」分段控件一键切换（Apple HIG 配色）；默认跟随系统 `prefers-color-scheme`，选择记忆在 localStorage；全站颜色走 CSS 变量 token
 - **跨平台**：macOS / Linux (x86_64 & ARM aarch64) / Windows 均可运行；启动时自动打开默认浏览器（headless 服务器自动跳过）
 
 ## 快速开始
@@ -107,6 +109,7 @@ NO_OPEN=1 npm start
 
 - `emailOverride`：当 GitHub API 拿不到 email（token 缺 `user:email` 权限）时用此覆盖
 - `containerImages`：手动维护的额外镜像列表，会显示在 GHCR 自动拉取列表之下（GHCR 已覆盖大多数场景，此字段可留空 `[]`）
+- `tokens`：PAT 管理页（`/tokens.html`）登记的额外 Token 列表，每项 `{id, label, token, note, createdAt}`；当前使用的 Token 仍是 `github.token`，在管理页点「设为活跃」即可切换
 
 ## 创建 GitHub Personal Access Token
 
@@ -144,8 +147,11 @@ github-dashboard/
 ├── start.cmd              # Windows 启动脚本
 ├── public/
 │   ├── index.html
-│   ├── style.css
-│   └── app.js
+│   ├── tokens.html        # PAT 管理页
+│   ├── style.css          # Apple HIG 设计 token：深色/浅色主题
+│   ├── ui.js              # 主题切换 + 模态 sheet 通用逻辑
+│   ├── app.js
+│   └── tokens.js
 └── docs/                  # 项目文档
 ```
 
@@ -160,6 +166,13 @@ github-dashboard/
 | GET | `/api/user` | 代理 `GET /user` + `GET /user/emails` |
 | GET | `/api/repos` | 代理 `GET /user/repos`（owner + collaborator） |
 | GET | `/api/packages` | 代理 `GET /user/packages?package_type=container` |
+| GET | `/api/tokens` | 列出全部已登记 PAT（掩码 + 活跃标记） |
+| GET | `/api/tokens/status` | 逐个探测 PAT：有效性 / 账号 / scopes / 有效期 / 速率配额 |
+| GET | `/api/tokens/:id/reveal` | 返回指定 PAT 完整值（`:id=active` 为当前活跃 Token） |
+| POST | `/api/tokens` | 新增 PAT（先校验再保存到 `config.json`） |
+| PUT | `/api/tokens/:id` | 修改备注名 / 用途 / Token |
+| DELETE | `/api/tokens/:id` | 删除本地 PAT 记录 |
+| POST | `/api/tokens/:id/activate` | 将指定 PAT 设为活跃（写入 `github.token`） |
 
 ## 环境要求
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('node:crypto');
 const { spawn } = require('child_process');
 const { ProxyAgent, setGlobalDispatcher } = require('undici');
 
@@ -32,6 +33,75 @@ function saveConfig(cfg) {
 function maskToken(token) {
   if (!token || token.length < 12) return '****';
   return `${token.slice(0, 7)}••••••••${token.slice(-4)}`;
+}
+
+function tokenType(token) {
+  if (!token) return 'unknown';
+  if (token.startsWith('github_pat_')) return 'fine-grained';
+  if (token.startsWith('ghp_')) return 'classic';
+  if (token.startsWith('gho_')) return 'oauth';
+  if (token.startsWith('ghs_')) return 'server';
+  return 'token';
+}
+
+async function probeToken(token) {
+  try {
+    const res = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'github-dashboard-local'
+      }
+    });
+    const scopes = res.headers.get('x-oauth-scopes');
+    const expiresAt = res.headers.get('github-authentication-token-expiration');
+    const rlLimit = res.headers.get('x-ratelimit-limit');
+    const rlRemaining = res.headers.get('x-ratelimit-remaining');
+    const rlReset = res.headers.get('x-ratelimit-reset');
+    const rateLimit = rlLimit
+      ? {
+          limit: Number(rlLimit),
+          remaining: Number(rlRemaining),
+          resetAt: rlReset ? new Date(Number(rlReset) * 1000).toISOString() : null
+        }
+      : null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      let message = `GitHub API ${res.status}`;
+      try { message = JSON.parse(text).message || message; } catch (_) { /* keep default */ }
+      return { valid: false, status: res.status, error: message, scopes, expiresAt, rateLimit };
+    }
+    const user = await res.json();
+    return { valid: true, login: user.login, name: user.name, scopes, expiresAt, rateLimit };
+  } catch (e) {
+    return { valid: false, error: e.message };
+  }
+}
+
+function listTokens(cfg) {
+  const activeToken = cfg.github?.token || '';
+  const entries = (cfg.tokens || []).map((t) => ({
+    id: t.id,
+    label: t.label || '(未命名)',
+    note: t.note || '',
+    createdAt: t.createdAt || null,
+    type: tokenType(t.token),
+    masked: maskToken(t.token),
+    active: !!activeToken && t.token === activeToken
+  }));
+  if (activeToken && !entries.some((t) => t.active)) {
+    entries.unshift({
+      id: 'active',
+      label: '当前活跃 Token (config.json)',
+      note: '来自 config.json 的 github.token，看板与 agent 正在使用',
+      createdAt: null,
+      type: tokenType(activeToken),
+      masked: maskToken(activeToken),
+      active: true
+    });
+  }
+  return entries;
 }
 
 async function gh(pathname, token) {
@@ -94,6 +164,120 @@ app.post('/api/token', (req, res) => {
   lastTokenExpiration = null;
   lastTokenScopes = null;
   res.json({ ok: true, tokenMasked: maskToken(newToken) });
+});
+
+app.get('/api/tokens', (req, res) => {
+  const cfg = loadConfig();
+  res.json({ tokens: listTokens(cfg) });
+});
+
+app.get('/api/tokens/status', async (req, res) => {
+  const cfg = loadConfig();
+  const stored = cfg.tokens || [];
+  const statuses = await Promise.all(
+    listTokens(cfg).map(async (entry) => {
+      let raw = null;
+      if (entry.id === 'active') raw = cfg.github?.token || '';
+      else raw = stored.find((t) => t.id === entry.id)?.token || '';
+      if (!raw) return { id: entry.id, valid: false, error: 'token 缺失' };
+      const probe = await probeToken(raw);
+      return { id: entry.id, ...probe };
+    })
+  );
+  res.json({ statuses });
+});
+
+app.get('/api/tokens/:id/reveal', (req, res) => {
+  const cfg = loadConfig();
+  if (req.params.id === 'active') {
+    return res.json({ token: cfg.github?.token || '' });
+  }
+  const entry = (cfg.tokens || []).find((t) => t.id === req.params.id);
+  if (!entry) return res.status(404).json({ error: '未找到该 PAT' });
+  res.json({ token: entry.token });
+});
+
+app.post('/api/tokens', async (req, res) => {
+  try {
+    const label = (req.body?.label || '').trim();
+    const token = (req.body?.token || '').trim();
+    const note = (req.body?.note || '').trim();
+    if (!token || token.length < 20) {
+      return res.status(400).json({ error: 'token 看起来无效（长度不足）' });
+    }
+    const cfg = loadConfig();
+    cfg.tokens = cfg.tokens || [];
+    if (cfg.github?.token === token || cfg.tokens.some((t) => t.token === token)) {
+      return res.status(409).json({ error: '该 token 已存在，无需重复添加' });
+    }
+    const probe = await probeToken(token);
+    if (!probe.valid) {
+      return res.status(400).json({ error: `Token 校验失败: ${probe.error}` });
+    }
+    const entry = {
+      id: crypto.randomUUID(),
+      label: label || probe.login || 'PAT',
+      token,
+      note,
+      createdAt: new Date().toISOString()
+    };
+    cfg.tokens.push(entry);
+    saveConfig(cfg);
+    res.status(201).json({
+      ok: true,
+      token: { id: entry.id, label: entry.label, note, type: tokenType(token), masked: maskToken(token), createdAt: entry.createdAt, active: false },
+      probe
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/tokens/:id', async (req, res) => {
+  try {
+    const cfg = loadConfig();
+    const entry = (cfg.tokens || []).find((t) => t.id === req.params.id);
+    if (!entry) return res.status(404).json({ error: '未找到该 PAT' });
+    const { label, note } = req.body || {};
+    const token = (req.body?.token || '').trim();
+    if (typeof label === 'string') entry.label = label.trim();
+    if (typeof note === 'string') entry.note = note.trim();
+    if (token) {
+      if (token.length < 20) return res.status(400).json({ error: 'token 看起来无效（长度不足）' });
+      if (token !== entry.token && (cfg.github?.token === token || cfg.tokens.some((t) => t.token === token))) {
+        return res.status(409).json({ error: '该 token 已存在，无需重复添加' });
+      }
+      const probe = await probeToken(token);
+      if (!probe.valid) return res.status(400).json({ error: `Token 校验失败: ${probe.error}` });
+      entry.token = token;
+    }
+    saveConfig(cfg);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/tokens/:id', (req, res) => {
+  const cfg = loadConfig();
+  const before = (cfg.tokens || []).length;
+  cfg.tokens = (cfg.tokens || []).filter((t) => t.id !== req.params.id);
+  if (cfg.tokens.length === before) return res.status(404).json({ error: '未找到该 PAT' });
+  saveConfig(cfg);
+  res.json({ ok: true });
+});
+
+app.post('/api/tokens/:id/activate', (req, res) => {
+  const cfg = loadConfig();
+  if (req.params.id === 'active') return res.json({ ok: true });
+  const entry = (cfg.tokens || []).find((t) => t.id === req.params.id);
+  if (!entry) return res.status(404).json({ error: '未找到该 PAT' });
+  cfg.github = cfg.github || {};
+  cfg.github.token = entry.token;
+  saveConfig(cfg);
+  lastTokenExpiration = null;
+  lastTokenScopes = null;
+  res.json({ ok: true });
 });
 
 app.get('/api/token-info', async (req, res) => {
@@ -175,14 +359,13 @@ app.get('/api/packages', async (req, res) => {
         latestTag = versions[0]?.metadata?.container?.tags?.[0] || versions[0]?.name || null;
       } catch (_) { /* ignore */ }
       const owner = p.owner?.login || username;
-      const ref = `ghcr.io/${owner}/${p.name}${latestTag ? ':' + latestTag : ''}`;
+      const ref = `ghcr.io/${String(owner).toLowerCase()}/${p.name}${latestTag ? ':' + latestTag : ''}`;
       return {
         name: p.name,
         owner,
         visibility: p.visibility,
         html_url: p.html_url,
         updated_at: p.updated_at,
-        version_count: p.version_count,
         latest_tag: latestTag,
         full_ref: ref
       };

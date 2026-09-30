@@ -3,13 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#000000" />
   <title>GitHub 个人账户看板</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('ghdash-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.dataset.theme = t;
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark';
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="topbar">
     <h1>GitHub 个人账户看板</h1>
     <div class="actions">
+      <a class="btn ghost" href="tokens.html">PAT 管理</a>
+      <div class="segmented" role="group" aria-label="外观">
+        <button type="button" class="seg" data-theme-choice="light">浅色</button>
+        <button type="button" class="seg" data-theme-choice="dark">深色</button>
+      </div>
       <button id="refreshBtn" class="btn ghost">刷新</button>
       <span id="status" class="status"></span>
     </div>
@@ -22,7 +41,7 @@
       <section class="card" id="userCard">
         <h2>用户信息</h2>
         <div class="user-block">
-          <img id="avatar" class="avatar" alt="avatar" />
+          <img id="avatar" class="avatar" width="64" height="64" alt="avatar" />
           <div class="user-fields" id="userFields">
             <div class="placeholder">加载中…</div>
           </div>
@@ -51,12 +70,6 @@
           <a class="btn ghost" href="https://github.com/settings/tokens" target="_blank" rel="noopener">在 GitHub 生成新 Token ↗</a>
           <button class="btn" data-action="show-paste">粘贴新 Token</button>
         </div>
-
-        <form id="pasteForm" class="paste-form hidden">
-          <input type="password" id="newTokenInput" placeholder="粘贴新生成的 ghp_... 或 github_pat_..." />
-          <button type="submit" class="btn primary">保存到 config.json</button>
-          <button type="button" class="btn ghost" data-action="cancel-paste">取消</button>
-        </form>
         <div class="hint">「保存」会写入本地 <code>config.json</code> 并立刻使用新 Token；不会调用 GitHub 接口创建 Token（GitHub 不支持自动生成）。</div>
       </section>
     </div>
@@ -65,7 +78,7 @@
     <section class="card" id="reposCard">
       <h2>
         仓库列表
-        <input type="search" id="repoSearch" placeholder="搜索仓库名 / 描述…" />
+        <input type="search" id="repoSearch" aria-label="搜索仓库名或描述" placeholder="搜索仓库名 / 描述…" />
         <span class="count" id="repoCount"></span>
       </h2>
       <div id="reposList" class="list repos">
@@ -77,7 +90,7 @@
     <section class="card" id="imagesCard">
       <h2>
         容器镜像 (GHCR)
-        <input type="search" id="imageSearch" placeholder="搜索镜像名…" />
+        <input type="search" id="imageSearch" aria-label="搜索镜像名" placeholder="搜索镜像名…" />
         <span class="count" id="imageCount"></span>
         <button class="btn ghost" data-action="reload-packages">重新加载</button>
       </h2>
@@ -88,7 +101,25 @@
     </section>
   </main>
 
-  <div id="toast" class="toast"></div>
+  <div id="pasteModal" class="sheet-overlay hidden">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
+      <h3 class="sheet-title" id="pasteTitle">粘贴新 Token</h3>
+      <p class="sheet-message">保存后会写入本地 config.json，并立即用于看板与 agent。</p>
+      <form id="pasteForm">
+        <div class="field">
+          <label class="field-label" for="newTokenInput">Token</label>
+          <input id="newTokenInput" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_... 或 github_pat_..." />
+        </div>
+        <div class="sheet-actions">
+          <button type="button" class="btn" data-action="cancel-paste">取消</button>
+          <button type="submit" class="btn primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="ui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
